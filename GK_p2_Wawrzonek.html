@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Earth Model with Moon</title>
+  <style>
+    body {
+      margin: 0;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    #info {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@2410ad1a8f5844df00191600eafda59def537830/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@2410ad1a8f5844df00191600eafda59def537830/examples/js/renderers/CSS2DRenderer.js"></script>
+
+  <script>
+    var textureURL = "https://raw.githubusercontent.com/Patrykos109/PNG/master/8k_earth_daymap.jpg";
+    var displacementURL = "https://raw.githubusercontent.com/Patrykos109/PNG/master/earthbump10k.jpg";
+    var starsURL = "https://raw.githubusercontent.com/Patrykos109/PNG/master/8k_stars.jpg";
+    var moonURL = "https://raw.githubusercontent.com/Patrykos109/PNG/master/8k_moon.jpg"; 
+
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    var renderer = new THREE.WebGLRenderer();
+
+    var controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enablePan = false;
+
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    var geometry = new THREE.SphereGeometry(2, 60, 60);
+
+    var textureLoader = new THREE.TextureLoader();
+    var texture = textureLoader.load(textureURL);
+    var displacementMap = textureLoader.load(displacementURL);
+    var worldTexture = textureLoader.load(starsURL);
+    var moonTexture = textureLoader.load(moonURL);
+
+    var material = new THREE.MeshPhongMaterial({
+      color: 0xffffff,
+      map: texture,
+      displacementMap: displacementMap,
+      displacementScale: 0.06,
+      bumpMap: displacementMap,
+      bumpScale: 0.04,
+      reflectivity: 0,
+      shininess: 0
+    });
+    material.map.offset.set(0.038, -0.011);
+
+    var earth = new THREE.Mesh(geometry, material);
+
+    var ambientLight = new THREE.AmbientLight(0x404040);
+    scene.add(ambientLight);
+
+    var worldGeometry = new THREE.SphereGeometry(1000, 60, 60);
+    var worldMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      map: worldTexture,
+      side: THREE.BackSide
+    });
+    var world = new THREE.Mesh(worldGeometry, worldMaterial);
+    scene.add(world);
+    scene.add(earth);
+    camera.position.z = 5;
+
+    earth.rotation.x = 3.1415 * 0.02;
+    earth.rotation.y = 3.1415 * 1.54;
+
+ 
+    var moonGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+    var moonMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, map: moonTexture });
+    var moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    scene.add(moon);
+
+    var moonOrbitRadius = 4;
+    var moonOrbitSpeed = 0.005;
+
+ 
+    var moonlight = new THREE.PointLight(0xffffff, 0.5);
+    scene.add(moonlight);
+
+    var raycaster = new THREE.Raycaster();
+    var mouse = new THREE.Vector2();
+    var INTERSECTED;
+
+
+
+    window.addEventListener('mousemove', onMouseMove, false);
+
+    window.focus();
+
+    var animatedPoints = [];
+
+    var infoDiv = document.createElement('div');
+    infoDiv.id = 'info';
+    document.body.appendChild(infoDiv);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      updatePoints();
+      updateMoon();
+      renderer.render(scene, camera);
+    }
+
+    function updatePoints() {
+      for (var i = 0; i < animatedPoints.length; i++) {
+        animatedPoints[i].update();
+      }
+    }
+
+
+    function updateMoon() {
+  
+      var delta = moonOrbitSpeed;
+      moon.position.x = moonOrbitRadius * Math.cos(delta);
+      moon.position.z = moonOrbitRadius * Math.sin(delta);
+     
+   
+      
+
+      moon.rotation.y += 0.01;
+
+
+      moonlight.position.copy(moon.position);
+
+    }
+
+    animate();
+
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      window.focus();
+    }
+
+    window.addEventListener('resize', onResize, false);
+
+    function onMouseMove(event) {
+      event.preventDefault();
+
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+
+      var intersects = raycaster.intersectObjects(animatedPoints);
+
+      if (intersects.length > 0) {
+        if (INTERSECTED != intersects[0].object) {
+          if (INTERSECTED) {
+            INTERSECTED.userData.labelSprite.visible = false;
+          }
+
+          INTERSECTED = intersects[0].object;
+          INTERSECTED.userData.labelSprite.visible = true;
+
+          infoDiv.innerHTML = `<b>Country:</b> ${INTERSECTED.userData.countryName}<br><b>Capital:</b> ${INTERSECTED.userData.capitalName}`;
+        }
+      } else {
+        if (INTERSECTED) {
+          INTERSECTED.userData.labelSprite.visible = false;
+        }
+        INTERSECTED = null;
+
+        infoDiv.innerHTML = '';
+      }
+    }
+
+    function addCountryPoints(latitude, longitude, countryName, capitalName) {
+
+      var pointGeometry = new THREE.SphereGeometry(0.02);
+      var pointMaterial = new THREE.MeshBasicMaterial({ color: 0x999999 });
+      var point = new THREE.Mesh(pointGeometry, pointMaterial);
+
+      var labelMaterial = new THREE.SpriteMaterial({ color: 0xffffff });
+      var labelSprite = new THREE.Sprite(labelMaterial);
+      labelSprite.scale.set(0.17, 0.1);
+      labelSprite.visible = false;
+
+      point.userData = { labelSprite: labelSprite, countryName: countryName, capitalName: capitalName };
+
+      scene.add(labelSprite);
+
+      var phi = (90 - latitude) * (Math.PI / 180);
+      var theta = (180 - longitude) * (Math.PI / 180);
+
+      point.position.x = 2 * Math.sin(phi) * Math.cos(theta);
+      point.position.y = 2 * Math.cos(phi);
+      point.position.z = 2 * Math.sin(phi) * Math.sin(theta);
+
+      scene.add(point);
+
+      point.update = function () {
+        var globeRotation = earth.rotation.y;
+        var newTheta = theta + globeRotation;
+
+        point.position.x = 2 * Math.sin(phi) * Math.cos(newTheta);
+        point.position.y = 2 * Math.cos(phi);
+        point.position.z = 2 * Math.sin(phi) * Math.sin(newTheta);
+
+        labelSprite.position.copy(point.position);
+        labelSprite.position.y += 0.1;
+      };
+
+      animatedPoints.push(point);
+
+      var pointToChangeLabel = animatedPoints.find(point => point.userData.countryName === "POLSKA");
+
+      if (pointToChangeLabel) {
+        pointToChangeLabel.userData.labelSprite.material.map = new THREE.TextureLoader().load('poland_flag.png');
+      }
+
+      var pointToChangeLabel = animatedPoints.find(point => point.userData.countryName === "ROSJA");
+
+      if (pointToChangeLabel) {
+        pointToChangeLabel.userData.labelSprite.material.map = new THREE.TextureLoader().load('Rosja_flaga.png');
+      }
+
+      var pointToChangeLabel = animatedPoints.find(point => point.userData.countryName === "CHINY");
+
+      if (pointToChangeLabel) {
+        pointToChangeLabel.userData.labelSprite.material.map = new THREE.TextureLoader().load('Chiny_flaga.png');
+      }
+
+      var pointToChangeLabel = animatedPoints.find(point => point.userData.countryName === "KANADA");
+
+      if (pointToChangeLabel) {
+        pointToChangeLabel.userData.labelSprite.material.map = new THREE.TextureLoader().load('Kanada_flaga.png');
+      }
+
+      var pointToChangeLabel = animatedPoints.find(point => point.userData.countryName === "USA");
+
+      if (pointToChangeLabel) {
+        pointToChangeLabel.userData.labelSprite.material.map = new THREE.TextureLoader().load('USA_flaga.png');
+      }
+
+      var pointToChangeLabel = animatedPoints.find(point => point.userData.countryName === "AUSTRALIA");
+
+      if (pointToChangeLabel) {
+        pointToChangeLabel.userData.labelSprite.material.map = new THREE.TextureLoader().load('Rosja_flaga.png');
+      }
+    }
+
+    addCountryPoints(55.751244, 37.618423, "ROSJA", "Moskwa");
+    addCountryPoints(51.759445, 19.457216, "POLSKA", "Warszawa");
+    addCountryPoints(45.424721, -75.695000, "KANADA", "Ottawa");
+    addCountryPoints(39.9075, 116.39723, "CHINY", "Pekin");
+    addCountryPoints(47.751076, -120.740135, "USA", "Waszyngton");
+
+  </script>
+</body>
+
+</html>
